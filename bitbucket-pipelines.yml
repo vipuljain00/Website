@@ -1,0 +1,138 @@
+image: node:18
+
+definitions:
+  services:
+    docker:
+      memory: 1024
+    docker-with-large-mem:
+      memory: 7168
+      type: docker
+    mongo:
+      image: mongo
+
+pipelines:
+  branches:
+    dev:
+      - step:
+          name: 1. Scanning Git Secrets
+          script:
+            - echo "Installing Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/clone-git-secrets.sh
+            - echo "Scan Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/git-secrets.sh
+      - step:
+          name: 2. Running Initial Tests
+          services:
+            - mongo
+          script:
+            - echo "Installing Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/clone-git-secrets.sh
+            - cd /${BITBUCKET_CLONE_DIR}
+            - echo "NPM Installing Packages"
+            - npm ci
+            - echo "Scan Git Secrets"
+            - cd /${BITBUCKET_CLONE_DIR}/src
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/git-secrets.sh
+            - cd /${BITBUCKET_CLONE_DIR}/src
+      - step:
+          name: 3. Push to Dockerhub
+          deployment: test
+          size: 2x
+          services: [docker-with-large-mem]
+          script:
+            - export DOCKER_BUILDKIT=1
+            - docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+            - bash ${BITBUCKET_CLONE_DIR}/ops/ci/push-docker-image-dockerhub.sh /${BITBUCKET_CLONE_DIR}
+      - step:
+          name: 4. Creating tag to commit
+          script:
+            - bash ${BITBUCKET_CLONE_DIR}/ops/ci/create-tag.sh
+      - step:
+          name: 5. Deploy to Remote via SSH
+          script:
+            - pipe: atlassian/ssh-run:0.4.3
+              variables:
+                SSH_USER: $SSH_USER_DEV             
+                SERVER: $SSH_HOST_DEV              
+                SSH_KEY: $SSH_KEY_DEV_VARIABLE
+                # The actual commands to run on remote:
+                COMMAND: |
+                  cd /home/shared
+                  docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+                  # For example, down + pull + up for a specific service, say "website-june-23"
+                  docker-compose --env-file .env.dev down website-june-23
+                  docker image prune -a -f
+                  docker-compose --env-file .env.dev pull website-june-23
+                  docker-compose --env-file .env.dev up -d website-june-23
+    
+    test:
+      - step:
+          name: 1. Scanning Git Secrets
+          script:
+            - echo "Installing Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/clone-git-secrets.sh
+            - echo "Scan Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/git-secrets.sh
+      - step:
+          name: 2. Running Initial Tests
+          services:
+            - mongo
+          script:
+            - echo "Installing Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/clone-git-secrets.sh
+            - cd /${BITBUCKET_CLONE_DIR}
+            - echo "NPM Installing Packages"
+            - npm ci
+            - echo "Scan Git Secrets"
+            - cd /${BITBUCKET_CLONE_DIR}/src
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/git-secrets.sh
+            - cd /${BITBUCKET_CLONE_DIR}/src
+      - step:
+          name: 3. Push to Dockerhub
+          deployment: test
+          size: 2x
+          services: [docker-with-large-mem]
+          script:
+            - export DOCKER_BUILDKIT=1
+            - docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+            - bash ${BITBUCKET_CLONE_DIR}/ops/ci/push-docker-image-dockerhub.sh /${BITBUCKET_CLONE_DIR}
+      - step:
+          name: 4. Creating tag to commit
+          script:
+            - bash ${BITBUCKET_CLONE_DIR}/ops/ci/create-tag.sh
+    
+    master:
+      - step:
+          name: 1. Scanning Git Secrets
+          script:
+            - echo "Installing Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/clone-git-secrets.sh
+            - echo "Scan Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/git-secrets.sh
+      - step:
+          name: 2. Running Initial Tests
+          services:
+            - mongo
+          script:
+            - echo "Installing Git Secrets"
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/clone-git-secrets.sh
+            - cd /${BITBUCKET_CLONE_DIR}
+            - echo "NPM Installing Packages"
+            - npm ci
+            - echo "Scan Git Secrets"
+            - cd /${BITBUCKET_CLONE_DIR}/src
+            - source ${BITBUCKET_CLONE_DIR}/ops/ci/git-secrets.sh
+            - cd /${BITBUCKET_CLONE_DIR}/src
+      - step:
+          name: 3. Push to Dockerhub
+          deployment: test
+          size: 2x
+          services: [docker-with-large-mem]
+          script:
+            - export DOCKER_BUILDKIT=1
+            - docker login -u ${DOCKER_HUB_USER} -p ${DOCKER_HUB_PASSWORD}
+            - bash ${BITBUCKET_CLONE_DIR}/ops/ci/push-docker-image-dockerhub.sh /${BITBUCKET_CLONE_DIR}
+      - step:
+          name: 4. Creating tag to commit
+          script:
+            - bash ${BITBUCKET_CLONE_DIR}/ops/ci/create-tag.sh
